@@ -20,7 +20,7 @@
       "@pages/*": ["./src/pages/*"],
       "@fixtures/*": ["./src/fixtures/*"],
       "@data/*": ["./src/data/*"],
-      "@types/*": ["./src/types/*"]
+      "@app-types/*": ["./src/types/*"]
     }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "playwright.config.ts"],
