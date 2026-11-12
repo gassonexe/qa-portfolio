@@ -5,9 +5,12 @@ import { SortOption } from '@app-types/catalog.types';
 export class CatalogPage extends BasePage {
   private readonly phonesCategoryLink: Locator;
   private readonly resultsCountText: Locator;
+  private readonly filtersPanel: Locator;
   private readonly activeFilterChips: Locator;
-  private readonly planDropdownArrow: Locator;
+  private readonly planCombobox: Locator;
   private readonly sortButton: Locator;
+
+  readonly productCards: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -15,29 +18,43 @@ export class CatalogPage extends BasePage {
       .locator('#category-selector')
       .getByRole('link', { name: 'Telefoni' });
     this.resultsCountText = page.getByRole('article').getByText('uređaja');
-    this.activeFilterChips = page.getByRole('button', { name: /\sclose$/ });
-    this.planDropdownArrow = page.locator('svg').nth(3);
-    this.sortButton = page.getByRole('button', { name: 'sorting-sliderSortiraj' });
+    this.filtersPanel = page.locator('#filters-container');
+    this.activeFilterChips = page.locator('.badge-container').getByRole('button');
+    this.planCombobox = page
+      .locator('.tp-filters')
+      .filter({ hasText: 'Tarifni paket' })
+      .getByRole('combobox');
+    this.sortButton = page.getByRole('button', { name: /Sortiraj/ });
+    this.productCards = page.locator('.device-list-item');
   }
 
   productCard(name: string): Locator {
-    return this.page.getByText(name);
+    return this.productCards.filter({ hasText: name });
   }
 
-  productMonthlyPrice(price: string): Locator {
-    return this.page.getByText(price).first();
+  /** Model name shown on a card, e.g. "Galaxy Z Fold7 256GB". */
+  cardModelName(card: Locator): Locator {
+    return card.locator('.brand-model__model');
+  }
+
+  /** Main monthly instalment on a card (excludes the old price and the recycling price). */
+  cardMonthlyPrice(card: Locator): Locator {
+    return card.locator('.product-price-modifier > .cosmos-price');
+  }
+
+  /** "Cena uređaja na 36 rata uz <plan>" label on every card. */
+  cardPlanLabels(): Locator {
+    return this.productCards.locator('.cosmos-label__text');
   }
 
   activeFilterChip(label: string): Locator {
-    return this.page.getByRole('button', { name: `${label} close` });
+    return this.page
+      .locator('.badge-container')
+      .getByRole('button', { name: `${label} close`, exact: true });
   }
 
   sortRadio(option: SortOption): Locator {
-    return this.page.getByRole('radio', { name: option });
-  }
-  
-    planPriceLabel(plan: string): Locator {
-    return this.page.getByText(`uz ${plan}`).first();
+    return this.page.getByRole('radio', { name: option, exact: true });
   }
 
   async openPhonesCatalog(): Promise<void> {
@@ -47,24 +64,25 @@ export class CatalogPage extends BasePage {
   }
 
   async filterByBrand(brand: string): Promise<void> {
-    await this.page.getByRole('button', { name: brand }).click();
+    await this.filtersPanel.getByRole('button', { name: brand, exact: true }).click();
   }
 
   async filterByRam(ram: string): Promise<void> {
-    await this.page.getByRole('button', { name: ram }).click();
+    await this.filtersPanel.getByRole('button', { name: ram, exact: true }).click();
   }
 
-    async filterByPlan(plan: string): Promise<void> {
-    await this.planDropdownArrow.click();
-    await this.page
-      .locator('[id^="react-select-"][id*="-option-"]')
-      .getByText(plan)
-      .click();
+  async filterByPlan(plan: string): Promise<void> {
+    // react-select renders an invisible input as the combobox; open it from the keyboard.
+    await this.planCombobox.focus();
+    await this.page.keyboard.press('ArrowDown');
+    await this.page.getByRole('option', { name: new RegExp(`^${escapeRegExp(plan)}\\s`) }).click();
   }
 
   async sortBy(option: SortOption): Promise<void> {
     await this.sortButton.hover();
-    await this.sortRadio(option).check();
+    // The radio input is read-only: `.check()` ticks it without triggering a sort.
+    // Clicking its label is what the site listens to.
+    await this.page.locator('label').filter({ hasText: option }).first().click();
   }
 
   async getResultsCount(): Promise<number> {
@@ -76,6 +94,14 @@ export class CatalogPage extends BasePage {
     return Number(match[0]);
   }
 
+  /** Monthly prices of the first `limit` cards, as numbers ("5.976" -> 5976). */
+  async getMonthlyPrices(limit = 20): Promise<number[]> {
+    const texts = await this.productCards
+      .locator('.product-price-modifier > .cosmos-price .cosmos-price__rate-value')
+      .allInnerTexts();
+    return texts.slice(0, limit).map((t) => Number(t.replace(/\./g, '')));
+  }
+
   async clearAllFilters(): Promise<void> {
     let remaining = await this.activeFilterChips.count();
     while (remaining > 0) {
@@ -84,4 +110,8 @@ export class CatalogPage extends BasePage {
       await expect(this.activeFilterChips).toHaveCount(remaining);
     }
   }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

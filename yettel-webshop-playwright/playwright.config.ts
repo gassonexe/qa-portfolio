@@ -7,7 +7,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  workers: isCI ? 2 : undefined,
+  // Tests hit the live yettel.rs site; too many parallel browsers get connections reset.
+  workers: 2,
   timeout: 60_000,
   expect: { timeout: 10_000 },
   reporter: isCI

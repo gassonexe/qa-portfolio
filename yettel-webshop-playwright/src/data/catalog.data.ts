@@ -1,14 +1,10 @@
-import { CatalogFilterData, CatalogProductData, SortOption } from '@app-types/catalog.types';
+import { CatalogFilterData, SortOption } from '@app-types/catalog.types';
 
 export const catalogFilters: CatalogFilterData = {
   brand: 'Samsung',
   ram: '> 8 GB',
-  plan: 'Yettel Mobile XL',
-};
-
-export const knownProduct: CatalogProductData = {
-  name: 'Galaxy Z Fold7 256GB',
-  monthlyPrice: '5.976RSD/mesečno',
+  // Not the default plan (Yettel Mobile XL), so selecting it must visibly change the prices.
+  plan: 'Yettel Mobile M',
 };
 
 export const sortLowestPrice: SortOption = 'Od najniže cene';
