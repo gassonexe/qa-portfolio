@@ -157,3 +157,27 @@
 - Riot Client attempts login
 - Riot Client shows authentication failure
 - Autologger does not crash
+
+---
+
+## D) Regression
+
+### TC-RA-011 – Account List Scrolling With Many Accounts
+
+**Priority:** Medium  
+**Related bug:** BUG-RA-002  
+
+**Steps:**
+1. Start with 2–3 saved accounts and confirm no scrollbar is shown
+2. Add accounts until the list is taller than the window
+3. Scroll to the bottom using the scrollbar, then using the mouse wheel
+4. Edit one account near the bottom of the list
+5. Delete accounts until the list fits in the window again
+
+**Expected Result:**
+- No scrollbar while the list fits in the window
+- Scrollbar appears once the list overflows, and every account can be reached
+- Mouse wheel scrolls the list only while the scrollbar is shown
+- After editing, the list keeps scrolling correctly
+- After deleting, the scrollbar disappears and the list stays centred
+
