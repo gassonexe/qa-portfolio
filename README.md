@@ -7,12 +7,21 @@ Welcome to my QA Portfolio! This repository showcases my practical testing workf
 * **Test Strategy & Planning:** Test Plan creation, requirement analysis, and scope definition.
 * **Test Design:** Comprehensive test case authoring covering functional, boundary, negative, and exploratory scenarios.
 * **Defect Lifecycle Management:** Detailed Jira-style bug reporting, tracking, and end-to-end retesting through GitHub.
-* **Test Automation:** Developing and maintaining automated test suites using **Python**, **JavaScript**, **Playwright**, and **Selenium**, alongside execution log analysis for debugging test failures.
+* **Test Automation:** Developing and maintaining automated test suites using **Python**, **JavaScript/TypeScript**, **Playwright**, and **Selenium**, alongside execution log analysis for debugging test failures.
+* **API Testing & CI:** Validating REST API responses, mocking API failures, and running test suites in **GitHub Actions**.
 * **Software Fundamentals:** Solid grounding in the SDLC and STLC.
 
 ---
 
 ## Repository Structure
+
+### `yettel-webshop-playwright/` ⭐ Featured
+UI and API test automation for the live [Yettel Serbia webshop](https://www.yettel.rs/webshop/sr/), built with **Playwright** and **TypeScript** using the Page Object Model. [Project README →](yettel-webshop-playwright/README.md)
+* **Purchase Flow Coverage:** 14 automated tests covering catalog filters and sorting, product configuration (colour, tariff pricing) and adding the selected bundle to the cart.
+* **API Testing:** Validates the catalog API response, cross-checks API data against the rendered page, and tests failure handling by mocking a 500 response.
+* **Bug Found in Production:** [BUG-001](yettel-webshop-playwright/README.md#bug-001-catalog-api-failure-is-shown-as-no-devices-match-your-filters): when the catalog API fails, users see "0 devices" and are told to change their installment count instead of seeing an error.
+* **Safe Testing on a Live Site:** A network guard blocks every order request in the browser, so no real order is ever created.
+* **CI:** Smoke and API tests run in GitHub Actions on every push to the project, with the HTML report uploaded when a run fails.
 
 ### `website-testing/`
 Contains comprehensive manual and functional testing documentation for sample web applications, focusing on core web features:
@@ -25,13 +34,7 @@ Houses documentation and automated testing suites for **Riot Autologger**—a cu
 * **Automated Test Execution:** Automated scripts validating login sequences, authentication tokens, and telemetry tracking.
 * **Structured Test Artifacts:** Dedicated test plans, edge-case test matrices, and execution logs tracking test stability and diagnostics.
 
-### `yettel-webshop-playwright/` *(In Progress)*
-An ongoing test automation project built with **Playwright** targeting e-commerce workflows. This repository section is focused on:
-* **E-Commerce End-to-End Testing:** Automating critical user flows including catalog browsing, product filtering, cart management, and checkout validation.
-* **Modern Test Architecture:** Implementing robust locators, asynchronous action handling, and cross-browser test configurations.
-* **Continuous Expansion:** Building out reusable test components and assertions as development continues.
-
 ---
 
 ## Continuous Improvement
-More projects, automated regression suites, and CI/CD testing workflows will be added here as I continue expanding my technical stack and advancing my career as a QA Engineer.
+More projects and automated regression suites will be added here as I continue expanding my technical stack and advancing my career as a QA Engineer.
