@@ -36,7 +36,7 @@ Contains comprehensive manual and functional testing documentation for sample we
 * **Navigation & Usability:** End-to-end user journeys, workflow validation, and UI responsiveness.
 
 ### `riot-autologger-testing/`
-Houses documentation and automated testing suites for **Riot Autologger**—a custom desktop utility designed to automate application authentication and login sequences. This section highlights:
+Houses documentation and automated testing suites for **[Riot Autologger](https://github.com/gassonexe/riot-autologger)**—a custom desktop utility designed to automate application authentication and login sequences. This section highlights:
 * **Automated Test Execution:** Automated scripts validating login sequences, authentication tokens, and telemetry tracking.
 * **Structured Test Artifacts:** Dedicated test plans, edge-case test matrices, and execution logs tracking test stability and diagnostics.
 
