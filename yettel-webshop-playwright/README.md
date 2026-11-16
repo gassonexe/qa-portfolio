@@ -1,16 +1,18 @@
 # Yettel Webshop – Playwright Tests
 
-UI and API test automation for the phones catalog of the [Yettel Serbia webshop](https://www.yettel.rs/webshop/sr/), built with Playwright and TypeScript.
+UI and API test automation for the [Yettel Serbia webshop](https://www.yettel.rs/webshop/sr/), built with Playwright and TypeScript. It covers the purchase flow from the phones catalog through product configuration (colour, tariff) to adding the bundle to the cart.
 
 ## Highlights
 
 - **Found a bug in the live webshop ([BUG-001](#bug-001-catalog-api-failure-is-shown-as-no-devices-match-your-filters)):** when the catalog API fails, users see "0 uređaja" and are told to change their installment count, instead of an error message with a retry option.
-- 11 automated tests across smoke, end-to-end and API suites, running in GitHub Actions.
+- 14 automated tests across smoke, end-to-end and API suites. Smoke and API tests run in GitHub Actions on every push.
 - API data is cross-checked against what the page renders, and the failure path is tested by mocking a 500 response.
+- The cart test verifies the exact device, colour and tariff sent in the order request, which is answered inside the test browser so no order is ever created.
 
 ## How the site was tested
 
 - Tests only read public catalog data. No orders, accounts or personal data are involved.
+- Every test runs with a safety guard that aborts any write request to the checkout API (`/bff/checkout/*`) in the browser. Tests that need the cart step to succeed answer that request locally with a fake response.
 - The API failure is simulated only inside the test browser by intercepting the request, so that request never reaches Yettel's servers.
 - No load or security testing was done. Tests run with 2 parallel browsers at most.
 
@@ -20,17 +22,18 @@ UI and API test automation for the phones catalog of the [Yettel Serbia webshop]
 |---|---|---|
 | Smoke | `tests/smoke/catalog-smoke.spec.ts` | Catalog loads, cards show a model name and a monthly price in the right format |
 | E2E | `tests/e2e/catalog-filters.spec.ts` | Brand, RAM and plan filters, combined filters, clearing filters, sorting by lowest price |
+| E2E | `tests/e2e/tariff-and-cart.spec.ts` | Tariff selection updates the device installment and total, colour variant updates the summary, the selected bundle is sent to the cart |
 | API | `tests/api/catalog-api.spec.ts` | Catalog API contract, API data vs. rendered cards, behaviour when the API returns 500 |
 
 ## Project structure
 
 ```
 src/
-  api/        catalog API config, URL matcher and response checks
-  data/       test data (filters, sort option)
-  fixtures/   Playwright fixtures that provide page objects
-  pages/      page objects (BasePage, CatalogPage)
-  types/      TypeScript types for test data and the API response
+  api/        API config, URL matchers, response checks and the checkout safety guard
+  data/       test data (filters, sort option, bundle selection)
+  fixtures/   Playwright fixtures that provide page objects and the safety guard
+  pages/      page objects (BasePage, CatalogPage, ProductDetailPage, CheckoutPage)
+  types/      TypeScript types for test data, API responses and the order request
 tests/
   smoke/  e2e/  api/
 docs/         screenshots for bug reports
@@ -49,15 +52,20 @@ npx playwright install chromium
 |---|---|
 | `npm test` | all tests |
 | `npm run test:smoke` | smoke tests |
-| `npm run test:e2e` | filter and sort tests |
+| `npm run test:e2e` | filter, sort, tariff and cart tests |
 | `npm run test:api` | API tests |
+| `npm run test:ci` | smoke and API tests (what CI runs) |
 | `npm run test:headed` | all tests with a visible browser |
 | `npm run typecheck` | TypeScript check |
 | `npm run report` | opens the HTML report of the last run |
 
 Tests run with 2 workers, because more parallel browsers can get their connections reset by the site. If a run fails with `net::ERR_CONNECTION_RESET` or a timeout on `page.goto`, the site was not reachable. Wait a minute and run again.
 
-CI runs on every push and pull request that changes this folder (see `.github/workflows/yettel-webshop-playwright.yml` in the repo root).
+CI runs the type-check plus smoke and API tests on every push and pull request to `main` that changes this folder, and uploads the HTML report when a run fails (see `.github/workflows/yettel-webshop-playwright.yml` in the repo root).
+
+## Out of scope: checkout form
+
+The "Tvoji podaci" (your details) form is not tested. The webshop only shows it after its server saves a real order (`POST /bff/checkout/order`, protected by reCAPTCHA). Reaching it would mean creating orders in production, so the suite stops at the cart step and verifies the order request instead. On a real project this would run against a test environment.
 
 ## Bugs found
 

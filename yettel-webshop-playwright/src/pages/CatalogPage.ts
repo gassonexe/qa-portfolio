@@ -70,6 +70,10 @@ export class CatalogPage extends BasePage {
     return this.page.waitForResponse((res) => isCatalogApiUrl(new URL(res.url())));
   }
 
+  async openFirstProduct(): Promise<void> {
+    await this.productCards.first().getByRole('link', { name: 'Detaljnije' }).click();
+  }
+
   async getVisibleModelNames(): Promise<string[]> {
     const texts = await this.cardModelName(this.productCards).allInnerTexts();
     return texts.map((t) => t.trim());

@@ -1,13 +1,14 @@
 {
   "name": "yettel-webshop-playwright",
   "version": "1.0.0",
-  "description": "Playwright + TypeScript UI and API tests for the Yettel Serbia webshop catalog",
+  "description": "Playwright + TypeScript UI and API tests for the Yettel Serbia webshop",
   "private": true,
   "scripts": {
     "test": "playwright test",
     "test:smoke": "playwright test tests/smoke",
     "test:e2e": "playwright test tests/e2e",
     "test:api": "playwright test tests/api",
+    "test:ci": "playwright test tests/smoke tests/api",
     "test:headed": "playwright test --headed",
     "typecheck": "tsc --noEmit",
     "report": "playwright show-report"
