@@ -45,7 +45,7 @@ test.describe('Catalog API', () => {
     expect((await catalogPage.getVisibleModelNames()).sort()).toEqual([...brandModels].sort());
   });
 
-  test('known issue BUG-001: catalog API 500 is shown as an empty result list', async ({ page, catalogPage }) => {
+  test('reproduces BUG-001: catalog API 500 is shown as an empty result list', async ({ page, catalogPage }) => {
     test.info().annotations.push({
       type: 'issue',
       description: 'BUG-001 (see README): API 500 renders "0 uređaja" + empty state instead of a service error.',
