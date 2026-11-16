@@ -1,9 +1,9 @@
-import { expect, Locator, Page } from '@playwright/test';
+import { expect, Locator, Page, Response } from '@playwright/test';
 import { BasePage } from '@pages/BasePage';
 import { SortOption } from '@app-types/catalog.types';
+import { isCatalogApiUrl } from '@api/catalog.api';
 
 export class CatalogPage extends BasePage {
-  private readonly phonesCategoryLink: Locator;
   private readonly resultsCountText: Locator;
   private readonly filtersPanel: Locator;
   private readonly activeFilterChips: Locator;
@@ -11,13 +11,16 @@ export class CatalogPage extends BasePage {
   private readonly sortButton: Locator;
 
   readonly productCards: Locator;
+  readonly phonesCategoryLink: Locator;
+  readonly emptyStateMessage: Locator;
 
   constructor(page: Page) {
     super(page);
     this.phonesCategoryLink = page
-      .locator('#category-selector')
+      .locator('[data-test-category-selector]')
       .getByRole('link', { name: 'Telefoni' });
-    this.resultsCountText = page.getByRole('article').getByText('uređaja');
+    // Anchored: the empty-state <article> also contains "uređaja".
+    this.resultsCountText = page.getByRole('article').getByText(/^\d+ uređaja$/);
     this.filtersPanel = page.locator('#filters-container');
     this.activeFilterChips = page.locator('.badge-container').getByRole('button');
     this.planCombobox = page
@@ -25,26 +28,21 @@ export class CatalogPage extends BasePage {
       .filter({ hasText: 'Tarifni paket' })
       .getByRole('combobox');
     this.sortButton = page.getByRole('button', { name: /Sortiraj/ });
-    this.productCards = page.locator('.device-list-item');
+    this.productCards = page.locator('[data-test-device-list-item]');
+    this.emptyStateMessage = page.getByText(/ne postoji ponuda uređaja/);
   }
 
-  productCard(name: string): Locator {
-    return this.productCards.filter({ hasText: name });
-  }
-
-  /** Model name shown on a card, e.g. "Galaxy Z Fold7 256GB". */
   cardModelName(card: Locator): Locator {
-    return card.locator('.brand-model__model');
+    return card.locator('[data-test-brand-model] .brand-model__model');
   }
 
-  /** Main monthly instalment on a card (excludes the old price and the recycling price). */
+  // Main monthly rate only, not the crossed-out old price or the recycling price.
   cardMonthlyPrice(card: Locator): Locator {
     return card.locator('.product-price-modifier > .cosmos-price');
   }
 
-  /** "Cena uređaja na 36 rata uz <plan>" label on every card. */
   cardPlanLabels(): Locator {
-    return this.productCards.locator('.cosmos-label__text');
+    return this.productCards.locator('[data-test-cosmos-label] .cosmos-label__text');
   }
 
   activeFilterChip(label: string): Locator {
@@ -57,10 +55,24 @@ export class CatalogPage extends BasePage {
     return this.page.getByRole('radio', { name: option, exact: true });
   }
 
-  async openPhonesCatalog(): Promise<void> {
+  async navigateToPhonesCatalog(): Promise<void> {
     await this.goto();
     await this.phonesCategoryLink.click();
+  }
+
+  async openPhonesCatalog(): Promise<void> {
+    await this.navigateToPhonesCatalog();
     await expect(this.resultsCountText).toBeVisible();
+  }
+
+  // Call before navigating: the catalog API fires once on load and filters are applied client-side.
+  waitForCatalogResponse(): Promise<Response> {
+    return this.page.waitForResponse((res) => isCatalogApiUrl(new URL(res.url())));
+  }
+
+  async getVisibleModelNames(): Promise<string[]> {
+    const texts = await this.cardModelName(this.productCards).allInnerTexts();
+    return texts.map((t) => t.trim());
   }
 
   async filterByBrand(brand: string): Promise<void> {
@@ -72,7 +84,7 @@ export class CatalogPage extends BasePage {
   }
 
   async filterByPlan(plan: string): Promise<void> {
-    // react-select renders an invisible input as the combobox; open it from the keyboard.
+    // react-select renders an invisible input as the combobox; it only opens from the keyboard.
     await this.planCombobox.focus();
     await this.page.keyboard.press('ArrowDown');
     await this.page.getByRole('option', { name: new RegExp(`^${escapeRegExp(plan)}\\s`) }).click();
@@ -80,8 +92,7 @@ export class CatalogPage extends BasePage {
 
   async sortBy(option: SortOption): Promise<void> {
     await this.sortButton.hover();
-    // The radio input is read-only: `.check()` ticks it without triggering a sort.
-    // Clicking its label is what the site listens to.
+    // The radio is read-only: .check() ticks it without sorting. The site listens to label clicks.
     await this.page.locator('label').filter({ hasText: option }).first().click();
   }
 
@@ -94,10 +105,9 @@ export class CatalogPage extends BasePage {
     return Number(match[0]);
   }
 
-  /** Monthly prices of the first `limit` cards, as numbers ("5.976" -> 5976). */
   async getMonthlyPrices(limit = 20): Promise<number[]> {
-    const texts = await this.productCards
-      .locator('.product-price-modifier > .cosmos-price .cosmos-price__rate-value')
+    const texts = await this.cardMonthlyPrice(this.productCards)
+      .locator('.cosmos-price__rate-value')
       .allInnerTexts();
     return texts.slice(0, limit).map((t) => Number(t.replace(/\./g, '')));
   }

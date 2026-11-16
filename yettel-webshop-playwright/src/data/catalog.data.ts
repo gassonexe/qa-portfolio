@@ -3,7 +3,7 @@ import { CatalogFilterData, SortOption } from '@app-types/catalog.types';
 export const catalogFilters: CatalogFilterData = {
   brand: 'Samsung',
   ram: '> 8 GB',
-  // Not the default plan (Yettel Mobile XL), so selecting it must visibly change the prices.
+  // Must not be the default plan (Yettel Mobile XL), otherwise selecting it changes nothing.
   plan: 'Yettel Mobile M',
 };
 

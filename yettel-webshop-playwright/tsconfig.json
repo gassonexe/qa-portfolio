@@ -17,6 +17,7 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "paths": {
+      "@api/*": ["./src/api/*"],
       "@pages/*": ["./src/pages/*"],
       "@fixtures/*": ["./src/fixtures/*"],
       "@data/*": ["./src/data/*"],
