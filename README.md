@@ -26,7 +26,7 @@ UI and API test automation for the live [Yettel Serbia webshop](https://www.yett
 ### `banking-app-testing/`
 Manual testing of [ParaBank](https://parabank.parasoft.com/parabank/index.htm), a demo online banking web application, on desktop and on mobile and tablet screen sizes.
 * **Coverage:** 32 test cases for registration, login and logout, password recovery, accounts, fund transfers, bill pay and transaction history.
-* **Defects Found:** 8 bug reports, including two critical fund transfer bugs: negative amounts move money in reverse, and transfers above the balance are accepted.
+* **Defects Found:** 11 bug reports, including three critical ones: negative transfer amounts move money in reverse, transfers above the balance are accepted, and password recovery shows the password in plain text and logs the user in.
 * **Responsive Testing:** Layout checked at 375px, 768px and desktop widths using Chrome DevTools device emulation.
 
 ### `website-testing/`

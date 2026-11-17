@@ -3,26 +3,26 @@
 Results: **Pass**, **Fail**, **Not run**. Every Fail links to a report in `bug-reports.md`.
 
 - Tester: 
-- Date: 2026-11-16
+- Dates: 2026-11-16 and 2026-11-17
 - Browser / OS: Google Chrome (latest) / Windows 10
 - Screen sizes: 375 x 812, 768 x 1024, desktop
-- Test user: Test User, accounts 74394 (checking) and 77502 (savings, opened in TC-ACC-002)
+- Test users: 2026-11-16 Test User (accounts 74394 checking, 77502 savings); 2026-11-17 qa_tester_1117, qa_tester_1117c, qa_lookup_1117
 
 | Test Case | Title | Result | Bug | Notes |
 |---|---|---|---|---|
 | TC-REG-001 | Successful Registration | Pass | | Account created, "Welcome Test User" shown |
 | TC-REG-002 | Required Fields Validation (All Empty) | Pass | | A "required" message for each field, e.g. "First name is required." Phone # is optional |
-| TC-REG-003 | Password and Confirm Do Not Match | Not run | | |
-| TC-REG-004 | Duplicate Username | Not run | | |
-| TC-REG-005 | Invalid Input Formats | Not run | | |
+| TC-REG-003 | Password and Confirm Do Not Match | Pass | | "Passwords did not match." shown next to Confirm, account not created, both password fields cleared |
+| TC-REG-004 | Duplicate Username | Pass | | "This username already exists." shown next to Username, account not created. (The first attempt with qa_tester_1117 succeeded because that name was not registered yet; the retry confirmed the duplicate check) |
+| TC-REG-005 | Invalid Input Formats | Fail | BUG-PB-009 | Account qa_tester_1117c created with Phone `abcdef`, Zip `!!!` and SSN `12`; no format validation on any of the three fields |
 | TC-LOGIN-001 | Valid Login | Pass | | Accounts Overview shown after login |
-| TC-LOGIN-002 | Invalid Password | Not run | | |
+| TC-LOGIN-002 | Invalid Password | Pass | | "The username and password could not be verified." User not logged in; message does not reveal whether the username or the password was wrong |
 | TC-LOGIN-003 | Empty Fields Validation | Pass | | "Please enter a username and password." |
 | TC-LOGIN-004 | Logout | Pass | | Redirected to the home page with the login form |
 | TC-LOGIN-005 | Back Button After Logout | Pass | BUG-PB-001 | No account data shown and no action possible, but every page returns an HTTP 500 error instead of the login page |
-| TC-LOGIN-006 | Session Timeout (Exploratory) | Not run | | |
-| TC-REC-001 | Recover Login Info With Valid Details | Not run | | |
-| TC-REC-002 | Recover Login Info With Wrong SSN | Not run | | |
+| TC-LOGIN-006 | Session Timeout (Exploratory) | Pass | BUG-PB-001 | Run 2026-11-17: idle from 12:30, clicked Accounts Overview at 13:19. Session had expired and the login form was shown, but with "An internal error has occurred" instead of a session-expired message. Exact timeout length not measured (under 49 minutes) |
+| TC-REC-001 | Recover Login Info With Valid Details | Fail | BUG-PB-010, BUG-PB-011 | With the details shared by several test accounts: "The customer information provided could not be found." Retested with a unique customer (qa_lookup_1117): account found, user logged in automatically, and the password shown on screen in plain text |
+| TC-REC-002 | Recover Login Info With Wrong SSN | Pass | | Unique customer details with SSN `999-99-9999`: "The customer information provided could not be found." No login information shown |
 | TC-REC-003 | Recover Login Info With Empty Fields | Pass | | A "required" message for each field |
 | TC-ACC-001 | Accounts Overview Shows Account and Balance | Pass | | Account 74394, $515.50, total matches |
 | TC-ACC-002 | Open a New Savings Account | Pass | | Account 77502 opened with $100.00, funding account reduced by $100.00 |
@@ -46,8 +46,8 @@ Results: **Pass**, **Fail**, **Not run**. Every Fail links to a report in `bug-r
 ## Summary
 
 - Planned: 32
-- Executed: 25
-- Passed: 15
-- Failed: 10
-- Not run: 7 (registration negative cases, invalid password, session timeout and password recovery with personal details)
-- Bugs reported: 8
+- Executed: 32
+- Passed: 20
+- Failed: 12
+- Not run: 0
+- Bugs reported: 11 (3 Critical)
