@@ -1,0 +1,1371 @@
+{
+  "info": {
+    "name": "ParaBank REST API Tests",
+    "description": "API tests for the ParaBank demo bank (https://parabank.parasoft.com). Requests run in order: the setup folder finds the test customer's accounts and opens a fresh savings account, so every run works on its own data.\n\nTests named \"BUG-PB-xxx still reproduces\" assert the current buggy behaviour, so the run stays green while the bug exists and fails once it is fixed. See ../bug-reports.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.request.headers.upsert({ key: 'Accept', value: 'application/json' });"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "fromAccountId",
+      "value": ""
+    },
+    {
+      "key": "toAccountId",
+      "value": ""
+    },
+    {
+      "key": "transactionId",
+      "value": ""
+    },
+    {
+      "key": "snapshot",
+      "value": "{}"
+    },
+    {
+      "key": "expectedChange",
+      "value": "{}"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Setup and Authentication",
+      "item": [
+        {
+          "name": "API-AUTH-001 Login with valid credentials",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/login/{{username}}/{{password}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "login",
+                "{{username}}",
+                "{{password}}"
+              ]
+            },
+            "description": "Skipped when no username and password are set. When it runs, the customer ID from the response is used for the rest of the run."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('username') || !pm.environment.get('password')) {",
+                  "  console.log('No credentials set, skipping login and using customerId from the environment');",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const customer = pm.response.json();",
+                  "pm.test('Response contains the customer ID and name', () => {",
+                  "  pm.expect(customer.id).to.be.a('number');",
+                  "  pm.expect(customer.firstName).to.be.a('string').and.not.be.empty;",
+                  "});",
+                  "pm.environment.set('customerId', customer.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-AUTH-002 Login with a wrong password is rejected",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/login/qa_unknown_user/wrong-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "login",
+                "qa_unknown_user",
+                "wrong-password"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error message does not reveal which field was wrong', () => {",
+                  "  pm.expect(pm.response.text()).to.eql('Invalid username and/or password');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-ACC-001 Get customer accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}",
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const accounts = pm.response.json();",
+                  "pm.test('Customer has at least one account', () => pm.expect(accounts).to.be.an('array').that.is.not.empty);",
+                  "pm.test('Every account belongs to the customer', () => {",
+                  "  accounts.forEach((a) => pm.expect(String(a.customerId)).to.eql(String(pm.environment.get('customerId'))));",
+                  "});",
+                  "const source = accounts.find((a) => a.type === 'CHECKING') || accounts[0];",
+                  "pm.collectionVariables.set('fromAccountId', source.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Setup: deposit $200 so the source account stays funded",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/deposit?accountId={{fromAccountId}}&amount=200",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "deposit"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "200"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Deposit is confirmed', () => {",
+                  "  pm.expect(pm.response.text()).to.include(`Successfully deposited $200 to account #${pm.collectionVariables.get('fromAccountId')}`);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-ACC-002 Open a new savings account",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/createAccount?customerId={{customerId}}&newAccountType=1&fromAccountId={{fromAccountId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "createAccount"
+              ],
+              "query": [
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}"
+                },
+                {
+                  "key": "newAccountType",
+                  "value": "1"
+                },
+                {
+                  "key": "fromAccountId",
+                  "value": "{{fromAccountId}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const account = pm.response.json();",
+                  "pm.test('New account is a SAVINGS account of this customer', () => {",
+                  "  pm.expect(account.type).to.eql('SAVINGS');",
+                  "  pm.expect(String(account.customerId)).to.eql(String(pm.environment.get('customerId')));",
+                  "});",
+                  "pm.test('BUG-PB-014 still reproduces: response shows balance 0 for a funded account', () => {",
+                  "  pm.expect(account.balance).to.eql(0);",
+                  "});",
+                  "pm.collectionVariables.set('toAccountId', account.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-ACC-003 New account is funded with $100 from the source account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{toAccountId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{toAccountId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const account = pm.response.json();",
+                  "pm.test('Account details match the new account', () => {",
+                  "  pm.expect(String(account.id)).to.eql(String(pm.collectionVariables.get('toAccountId')));",
+                  "  pm.expect(account.type).to.eql('SAVINGS');",
+                  "});",
+                  "pm.test('Balance is $100.00', () => pm.expect(account.balance).to.eql(100));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Customer and Account Data",
+      "item": [
+        {
+          "name": "API-CUS-001 Get customer details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const customer = pm.response.json();",
+                  "pm.test('Response has the customer profile fields', () => {",
+                  "  pm.expect(String(customer.id)).to.eql(String(pm.environment.get('customerId')));",
+                  "  pm.expect(customer).to.include.keys('firstName', 'lastName', 'address', 'phoneNumber');",
+                  "});",
+                  "pm.test('BUG-PB-012 still reproduces: customer data including SSN is returned without authentication', () => {",
+                  "  pm.expect(pm.request.headers.has('Authorization')).to.be.false;",
+                  "  pm.expect(customer).to.have.property('ssn');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-ACC-004 Get an account that does not exist",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/999999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "999999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error message names the missing account', () => {",
+                  "  pm.expect(pm.response.text()).to.eql('Could not find account #999999999');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Fund Transfers",
+      "item": [
+        {
+          "name": "Setup: record current balances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}",
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const accounts = pm.response.json();",
+                  "const ids = [pm.collectionVariables.get('fromAccountId'), pm.collectionVariables.get('toAccountId')];",
+                  "const snapshot = {};",
+                  "ids.forEach((id) => {",
+                  "  const account = accounts.find((a) => String(a.id) === String(id));",
+                  "  snapshot[id] = Math.round(account.balance * 100);",
+                  "});",
+                  "pm.collectionVariables.set('snapshot', JSON.stringify(snapshot));",
+                  "pm.collectionVariables.set('expectedChange', '{}');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRF-001 Transfer $25 between own accounts",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transfer?fromAccountId={{fromAccountId}}&toAccountId={{toAccountId}}&amount=25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfer"
+              ],
+              "query": [
+                {
+                  "key": "fromAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "toAccountId",
+                  "value": "{{toAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "25"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const from = pm.collectionVariables.get('fromAccountId');",
+                  "const to = pm.collectionVariables.get('toAccountId');",
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Transfer is confirmed', () => {",
+                  "  pm.expect(pm.response.text()).to.eql(`Successfully transferred $25 from account #${from} to account #${to}`);",
+                  "});",
+                  "pm.collectionVariables.set('expectedChange', JSON.stringify({ [from]: -25, [to]: 25 }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check: $25 moved from source to savings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}",
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const accounts = pm.response.json();",
+                  "const cents = (n) => Math.round(Number(n) * 100);",
+                  "const balanceOf = (id) => {",
+                  "  const account = accounts.find((a) => String(a.id) === String(id));",
+                  "  return account ? cents(account.balance) : undefined;",
+                  "};",
+                  "const before = JSON.parse(pm.collectionVariables.get('snapshot'));",
+                  "const expected = JSON.parse(pm.collectionVariables.get('expectedChange') || '{}');",
+                  "",
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "Object.keys(before).forEach((id) => {",
+                  "  const change = cents(expected[id] || 0);",
+                  "  pm.test(`Account ${id} balance changed by ${(change / 100).toFixed(2)}`, () => {",
+                  "    pm.expect(balanceOf(id)).to.eql(before[id] + change);",
+                  "  });",
+                  "});",
+                  "",
+                  "const snapshot = {};",
+                  "Object.keys(before).forEach((id) => (snapshot[id] = balanceOf(id)));",
+                  "pm.collectionVariables.set('snapshot', JSON.stringify(snapshot));",
+                  "pm.collectionVariables.set('expectedChange', '{}');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRF-002 Transfer a negative amount",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transfer?fromAccountId={{fromAccountId}}&toAccountId={{toAccountId}}&amount=-5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfer"
+              ],
+              "query": [
+                {
+                  "key": "fromAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "toAccountId",
+                  "value": "{{toAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "-5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const from = pm.collectionVariables.get('fromAccountId');",
+                  "const to = pm.collectionVariables.get('toAccountId');",
+                  "pm.test('BUG-PB-003 still reproduces: negative amount is accepted', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.include('Successfully transferred $-5');",
+                  "});",
+                  "pm.collectionVariables.set('expectedChange', JSON.stringify({ [from]: 5, [to]: -5 }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check: BUG-PB-003 money moved in reverse",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}",
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const accounts = pm.response.json();",
+                  "const cents = (n) => Math.round(Number(n) * 100);",
+                  "const balanceOf = (id) => {",
+                  "  const account = accounts.find((a) => String(a.id) === String(id));",
+                  "  return account ? cents(account.balance) : undefined;",
+                  "};",
+                  "const before = JSON.parse(pm.collectionVariables.get('snapshot'));",
+                  "const expected = JSON.parse(pm.collectionVariables.get('expectedChange') || '{}');",
+                  "",
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "Object.keys(before).forEach((id) => {",
+                  "  const change = cents(expected[id] || 0);",
+                  "  pm.test(`Account ${id} balance changed by ${(change / 100).toFixed(2)}`, () => {",
+                  "    pm.expect(balanceOf(id)).to.eql(before[id] + change);",
+                  "  });",
+                  "});",
+                  "",
+                  "const snapshot = {};",
+                  "Object.keys(before).forEach((id) => (snapshot[id] = balanceOf(id)));",
+                  "pm.collectionVariables.set('snapshot', JSON.stringify(snapshot));",
+                  "pm.collectionVariables.set('expectedChange', '{}');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRF-003 Transfer $0",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transfer?fromAccountId={{fromAccountId}}&toAccountId={{toAccountId}}&amount=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfer"
+              ],
+              "query": [
+                {
+                  "key": "fromAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "toAccountId",
+                  "value": "{{toAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('BUG-PB-005 still reproduces: $0 transfer is accepted', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.include('Successfully transferred $0');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRF-004 Transfer more than the available balance",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transfer?fromAccountId={{toAccountId}}&toAccountId={{fromAccountId}}&amount={{overdraftAmount}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfer"
+              ],
+              "query": [
+                {
+                  "key": "fromAccountId",
+                  "value": "{{toAccountId}}"
+                },
+                {
+                  "key": "toAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "{{overdraftAmount}}"
+                }
+              ]
+            },
+            "description": "Sends the savings balance plus $500 from the new savings account, so only the throwaway account goes negative."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const snapshot = JSON.parse(pm.collectionVariables.get('snapshot'));",
+                  "const balance = snapshot[pm.collectionVariables.get('toAccountId')] / 100;",
+                  "pm.collectionVariables.set('overdraftAmount', String(balance + 500));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const amount = Number(pm.collectionVariables.get('overdraftAmount'));",
+                  "const from = pm.collectionVariables.get('toAccountId');",
+                  "const to = pm.collectionVariables.get('fromAccountId');",
+                  "pm.test('BUG-PB-004 still reproduces: transfer above the balance is accepted', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.include('Successfully transferred');",
+                  "});",
+                  "pm.collectionVariables.set('expectedChange', JSON.stringify({ [from]: -amount, [to]: amount }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check: BUG-PB-004 savings account is now $500 overdrawn",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}",
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const accounts = pm.response.json();",
+                  "const cents = (n) => Math.round(Number(n) * 100);",
+                  "const balanceOf = (id) => {",
+                  "  const account = accounts.find((a) => String(a.id) === String(id));",
+                  "  return account ? cents(account.balance) : undefined;",
+                  "};",
+                  "const before = JSON.parse(pm.collectionVariables.get('snapshot'));",
+                  "const expected = JSON.parse(pm.collectionVariables.get('expectedChange') || '{}');",
+                  "",
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "Object.keys(before).forEach((id) => {",
+                  "  const change = cents(expected[id] || 0);",
+                  "  pm.test(`Account ${id} balance changed by ${(change / 100).toFixed(2)}`, () => {",
+                  "    pm.expect(balanceOf(id)).to.eql(before[id] + change);",
+                  "  });",
+                  "});",
+                  "",
+                  "const snapshot = {};",
+                  "Object.keys(before).forEach((id) => (snapshot[id] = balanceOf(id)));",
+                  "pm.collectionVariables.set('snapshot', JSON.stringify(snapshot));",
+                  "pm.collectionVariables.set('expectedChange', '{}');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRF-005 Transfer to the same account",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transfer?fromAccountId={{fromAccountId}}&toAccountId={{fromAccountId}}&amount=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfer"
+              ],
+              "query": [
+                {
+                  "key": "fromAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "toAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('BUG-PB-006 still reproduces: transfer to the same account is accepted', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.text()).to.include('Successfully transferred $1');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRF-006 Transfer with an empty amount",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transfer?fromAccountId={{fromAccountId}}&toAccountId={{toAccountId}}&amount=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfer"
+              ],
+              "query": [
+                {
+                  "key": "fromAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "toAccountId",
+                  "value": "{{toAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('BUG-PB-002 still reproduces: empty amount causes a server error instead of a validation error', () => {",
+                  "  pm.response.to.have.status(500);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRF-007 Transfer with a non-numeric amount is rejected",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transfer?fromAccountId={{fromAccountId}}&toAccountId={{toAccountId}}&amount=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfer"
+              ],
+              "query": [
+                {
+                  "key": "fromAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "toAccountId",
+                  "value": "{{toAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "abc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Request is rejected with a client error', () => {",
+                  "  pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRF-008 Transfer to an account that does not exist",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transfer?fromAccountId={{fromAccountId}}&toAccountId=1&amount=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfer"
+              ],
+              "query": [
+                {
+                  "key": "fromAccountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "toAccountId",
+                  "value": "1"
+                },
+                {
+                  "key": "amount",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error message names the accounts', () => {",
+                  "  pm.expect(pm.response.text()).to.include('Could not find account number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check: rejected and same-account transfers did not change balances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}",
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const accounts = pm.response.json();",
+                  "const cents = (n) => Math.round(Number(n) * 100);",
+                  "const balanceOf = (id) => {",
+                  "  const account = accounts.find((a) => String(a.id) === String(id));",
+                  "  return account ? cents(account.balance) : undefined;",
+                  "};",
+                  "const before = JSON.parse(pm.collectionVariables.get('snapshot'));",
+                  "const expected = JSON.parse(pm.collectionVariables.get('expectedChange') || '{}');",
+                  "",
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "Object.keys(before).forEach((id) => {",
+                  "  const change = cents(expected[id] || 0);",
+                  "  pm.test(`Account ${id} balance changed by ${(change / 100).toFixed(2)}`, () => {",
+                  "    pm.expect(balanceOf(id)).to.eql(before[id] + change);",
+                  "  });",
+                  "});",
+                  "",
+                  "const snapshot = {};",
+                  "Object.keys(before).forEach((id) => (snapshot[id] = balanceOf(id)));",
+                  "pm.collectionVariables.set('snapshot', JSON.stringify(snapshot));",
+                  "pm.collectionVariables.set('expectedChange', '{}');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Bill Pay",
+      "item": [
+        {
+          "name": "API-BILL-001 Pay a $10 bill",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/billpay?accountId={{fromAccountId}}&amount=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "billpay"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "10"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Electric Company\",\n  \"address\": {\n    \"street\": \"1 Main Street\",\n    \"city\": \"Belgrade\",\n    \"state\": \"BG\",\n    \"zipCode\": \"11000\"\n  },\n  \"phoneNumber\": \"0601111111\",\n  \"accountNumber\": 12345\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const from = pm.collectionVariables.get('fromAccountId');",
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const result = pm.response.json();",
+                  "pm.test('Response confirms payee, amount and account', () => {",
+                  "  pm.expect(result.payeeName).to.eql('QA Electric Company');",
+                  "  pm.expect(result.amount).to.eql(10);",
+                  "  pm.expect(String(result.accountId)).to.eql(String(from));",
+                  "});",
+                  "pm.collectionVariables.set('expectedChange', JSON.stringify({ [from]: -10 }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check: $10 was taken from the source account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}",
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const accounts = pm.response.json();",
+                  "const cents = (n) => Math.round(Number(n) * 100);",
+                  "const balanceOf = (id) => {",
+                  "  const account = accounts.find((a) => String(a.id) === String(id));",
+                  "  return account ? cents(account.balance) : undefined;",
+                  "};",
+                  "const before = JSON.parse(pm.collectionVariables.get('snapshot'));",
+                  "const expected = JSON.parse(pm.collectionVariables.get('expectedChange') || '{}');",
+                  "",
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "Object.keys(before).forEach((id) => {",
+                  "  const change = cents(expected[id] || 0);",
+                  "  pm.test(`Account ${id} balance changed by ${(change / 100).toFixed(2)}`, () => {",
+                  "    pm.expect(balanceOf(id)).to.eql(before[id] + change);",
+                  "  });",
+                  "});",
+                  "",
+                  "const snapshot = {};",
+                  "Object.keys(before).forEach((id) => (snapshot[id] = balanceOf(id)));",
+                  "pm.collectionVariables.set('snapshot', JSON.stringify(snapshot));",
+                  "pm.collectionVariables.set('expectedChange', '{}');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-BILL-002 Pay a bill with a negative amount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/billpay?accountId={{fromAccountId}}&amount=-10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "billpay"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{fromAccountId}}"
+                },
+                {
+                  "key": "amount",
+                  "value": "-10"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Electric Company\",\n  \"address\": {\n    \"street\": \"1 Main Street\",\n    \"city\": \"Belgrade\",\n    \"state\": \"BG\",\n    \"zipCode\": \"11000\"\n  },\n  \"phoneNumber\": \"0601111111\",\n  \"accountNumber\": 12345\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const from = pm.collectionVariables.get('fromAccountId');",
+                  "pm.test('BUG-PB-013 still reproduces: negative bill payment is accepted', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().amount).to.eql(-10);",
+                  "});",
+                  "pm.collectionVariables.set('expectedChange', JSON.stringify({ [from]: 10 }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Check: BUG-PB-013 negative bill payment added $10 to the account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/customers/{{customerId}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "{{customerId}}",
+                "accounts"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const accounts = pm.response.json();",
+                  "const cents = (n) => Math.round(Number(n) * 100);",
+                  "const balanceOf = (id) => {",
+                  "  const account = accounts.find((a) => String(a.id) === String(id));",
+                  "  return account ? cents(account.balance) : undefined;",
+                  "};",
+                  "const before = JSON.parse(pm.collectionVariables.get('snapshot'));",
+                  "const expected = JSON.parse(pm.collectionVariables.get('expectedChange') || '{}');",
+                  "",
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "Object.keys(before).forEach((id) => {",
+                  "  const change = cents(expected[id] || 0);",
+                  "  pm.test(`Account ${id} balance changed by ${(change / 100).toFixed(2)}`, () => {",
+                  "    pm.expect(balanceOf(id)).to.eql(before[id] + change);",
+                  "  });",
+                  "});",
+                  "",
+                  "const snapshot = {};",
+                  "Object.keys(before).forEach((id) => (snapshot[id] = balanceOf(id)));",
+                  "pm.collectionVariables.set('snapshot', JSON.stringify(snapshot));",
+                  "pm.collectionVariables.set('expectedChange', '{}');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Transaction History",
+      "item": [
+        {
+          "name": "API-TRX-001 List transactions of the new account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{toAccountId}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{toAccountId}}",
+                "transactions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const transactions = pm.response.json();",
+                  "const transfer = transactions.find((t) => t.amount === 25 && t.type === 'Credit');",
+                  "pm.test('The $25 transfer is listed as a credit', () => {",
+                  "  pm.expect(transfer, 'credit of $25').to.exist;",
+                  "  pm.expect(transfer.description).to.eql('Funds Transfer Received');",
+                  "});",
+                  "pm.test('Every transaction belongs to the account', () => {",
+                  "  transactions.forEach((t) => pm.expect(String(t.accountId)).to.eql(String(pm.collectionVariables.get('toAccountId'))));",
+                  "});",
+                  "if (transfer) pm.collectionVariables.set('transactionId', transfer.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRX-002 Get a transaction by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/{{transactionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions",
+                "{{transactionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const transaction = pm.response.json();",
+                  "pm.test('Transaction matches the $25 transfer', () => {",
+                  "  pm.expect(String(transaction.id)).to.eql(String(pm.collectionVariables.get('transactionId')));",
+                  "  pm.expect(transaction.amount).to.eql(25);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRX-003 Find transactions by amount",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{toAccountId}}/transactions/amount/25",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{toAccountId}}",
+                "transactions",
+                "amount",
+                "25"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const transactions = pm.response.json();",
+                  "pm.test('At least one transaction is found', () => pm.expect(transactions).to.not.be.empty);",
+                  "pm.test('Every result has amount $25', () => transactions.forEach((t) => pm.expect(t.amount).to.eql(25)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRX-004 Find transactions in a date range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{toAccountId}}/transactions/fromDate/01-01-2000/toDate/12-31-2099",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{toAccountId}}",
+                "transactions",
+                "fromDate",
+                "01-01-2000",
+                "toDate",
+                "12-31-2099"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', () => pm.response.to.have.status(200));",
+                  "const transactions = pm.response.json();",
+                  "pm.test('The $25 transfer is in the range', () => {",
+                  "  pm.expect(transactions.map((t) => String(t.id))).to.include(String(pm.collectionVariables.get('transactionId')));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API-TRX-005 Find transactions with an invalid date",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{toAccountId}}/transactions/onDate/99-99-9999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{toAccountId}}",
+                "transactions",
+                "onDate",
+                "99-99-9999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('BUG-PB-007 still reproduces: invalid date returns an empty list instead of a validation error', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json()).to.eql([]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

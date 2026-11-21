@@ -4,14 +4,17 @@ Environment:
 - Browser: Google Chrome (latest)
 - OS: Windows 10
 - URL: https://parabank.parasoft.com/parabank/index.htm
-- Dates: 2026-11-16, 2026-11-17
-- Test accounts: 74394 (checking), 77502 (savings)
+- API: https://parabank.parasoft.com/parabank/services/bank (Postman / Newman)
+- Dates: 2026-11-16, 2026-11-17, 2026-11-21 (API)
+- Test accounts: 74394 (checking), 77502 (savings); API: customer 43847, accounts 59298, 59409, 59520 and the savings accounts the API tests open
 
 | ID | Title | Severity |
 |---|---|---|
 | BUG-PB-003 | Negative transfer amount is accepted and moves money in reverse | Critical |
 | BUG-PB-004 | Transfer above the available balance is accepted (no overdraft check) | Critical |
 | BUG-PB-010 | Password recovery shows the password in plain text and logs the user in | Critical |
+| BUG-PB-012 | REST API requires no authentication for customer data or money movement | Critical |
+| BUG-PB-013 | Negative bill payment amount is accepted and adds money to the account | Critical |
 | BUG-PB-002 | Empty or non-numeric transfer amount causes an internal server error | Medium |
 | BUG-PB-001 | Account pages return HTTP 500 instead of the login page when logged out | Medium |
 | BUG-PB-008 | Site is not responsive on mobile and tablet screen sizes | Medium |
@@ -20,6 +23,9 @@ Environment:
 | BUG-PB-005 | Transfer of $0.00 is accepted | Low |
 | BUG-PB-006 | Transfer to the same account is accepted | Low |
 | BUG-PB-007 | Invalid date in Find Transactions shows no validation message | Low |
+| BUG-PB-014 | Open account API returns balance 0 for an account funded with $100 | Low |
+
+BUG-PB-012 to BUG-PB-014 were found with the API tests in [`api-tests/`](api-tests/README.md). The API tests also confirm BUG-PB-002 to BUG-PB-007 at the API level.
 
 ---
 
@@ -304,3 +310,81 @@ Environment:
 - Registration rejects an SSN that already belongs to another customer, or asks the user to log in to the existing profile
 - Password recovery never tells a real customer that their details cannot be found
 
+
+---
+
+## BUG-PB-012 – REST API Requires No Authentication for Customer Data or Money Movement
+
+**Severity:** Critical  
+**Priority:** P1  
+**Module:** REST API (`/parabank/services/bank`)  
+**Found by:** API-CUS-001, API-TRF-001, API-BILL-001  
+**Date:** 2026-11-21  
+
+### Steps to Reproduce:
+1. Without logging in and without any token, cookie or Authorization header, send:
+   `GET https://parabank.parasoft.com/parabank/services/bank/customers/43847` with header `Accept: application/json`
+2. Send `GET .../customers/43847/accounts`
+3. Send `POST .../transfer?fromAccountId=59298&toAccountId=59520&amount=10`
+
+### Actual Result:
+- Step 1 returns the full customer profile: name, address, phone number and **SSN**
+- Step 2 lists every account with its balance
+- Step 3 returns "Successfully transferred $10 from account #59298 to account #59520" and the balances change
+- Account details of other customers are returned the same way, for example `GET .../accounts/12345` returns HTTP 200
+
+### Expected Result:
+- Every endpoint returns 401 Unauthorized without a valid session or token
+- A logged-in customer can only read and move money on their own accounts
+
+### Impact:
+- Anyone who knows or guesses a customer or account ID can read personal data and move money
+- IDs are sequential numbers, so they are easy to guess
+
+### Note:
+- Tested only with the tester's own accounts; no money was moved on other customers' accounts
+
+---
+
+## BUG-PB-013 – Negative Bill Payment Amount Is Accepted and Adds Money to the Account
+
+**Severity:** Critical  
+**Priority:** P1  
+**Module:** Bill Pay (REST API)  
+**Found by:** API-BILL-002  
+**Date:** 2026-11-21  
+
+### Steps to Reproduce:
+1. Note the balance of account 59409 (`GET .../accounts/59409`): $100,095.00
+2. Send `POST .../billpay?accountId=59409&amount=-7` with a valid payee in the JSON body
+3. Check the balance again
+
+### Actual Result:
+- Response: `{"payeeName":"QA Electric","amount":-7,"accountId":59409}`, HTTP 200
+- The balance goes **up** by $7.00 to $100,102.00
+- A customer can add any amount to their own account by "paying" a negative bill
+
+### Expected Result:
+- Amounts of zero or below are rejected with 400 Bad Request and a validation message
+- No balance changes
+
+---
+
+## BUG-PB-014 – Open Account API Returns Balance 0 for an Account Funded With $100
+
+**Severity:** Low  
+**Priority:** P3  
+**Module:** Open New Account (REST API)  
+**Found by:** API-ACC-002, API-ACC-003  
+**Date:** 2026-11-21  
+
+### Steps to Reproduce:
+1. Send `POST .../createAccount?customerId=43847&newAccountType=1&fromAccountId=59298`
+2. Send `GET .../accounts/{id}` for the ID in the response
+
+### Actual Result:
+- Step 1 returns `{"id":59631,"customerId":43847,"type":"SAVINGS","balance":0}`
+- Step 2 shows the same account with `"balance":100.00`, and $100.00 was taken from account 59298
+
+### Expected Result:
+- The response shows the real opening balance of $100.00

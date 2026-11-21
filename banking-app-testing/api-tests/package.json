@@ -1,0 +1,12 @@
+{
+  "name": "parabank-api-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Postman/Newman API tests for the ParaBank demo bank",
+  "scripts": {
+    "test": "node run.cjs"
+  },
+  "devDependencies": {
+    "newman": "6.2.3"
+  }
+}

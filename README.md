@@ -24,9 +24,10 @@ UI and API test automation for the live [Yettel Serbia webshop](https://www.yett
 * **CI:** Smoke and API tests run in GitHub Actions on every push to the project, with the HTML report uploaded when a run fails.
 
 ### `banking-app-testing/`
-Manual testing of [ParaBank](https://parabank.parasoft.com/parabank/index.htm), a demo online banking web application, on desktop and on mobile and tablet screen sizes.
-* **Coverage:** 32 test cases for registration, login and logout, password recovery, accounts, fund transfers, bill pay and transaction history.
-* **Defects Found:** 11 bug reports, including three critical ones: negative transfer amounts move money in reverse, transfers above the balance are accepted, and password recovery shows the password in plain text and logs the user in.
+Manual and API testing of [ParaBank](https://parabank.parasoft.com/parabank/index.htm), a demo online banking web application, on desktop and on mobile and tablet screen sizes.
+* **Coverage:** 32 manual test cases for registration, login and logout, password recovery, accounts, fund transfers, bill pay and transaction history.
+* **API Testing:** A [Postman collection](banking-app-testing/api-tests/README.md) for the ParaBank REST API, run with Newman in GitHub Actions. After every transfer and bill payment it re-reads the balances to check exactly how much money moved.
+* **Defects Found:** 14 bug reports, including five critical ones: the API requires no authentication for customer data or transfers, negative transfer and bill pay amounts move money the wrong way, transfers above the balance are accepted, and password recovery shows the password in plain text and logs the user in.
 * **Responsive Testing:** Layout checked at 375px, 768px and desktop widths using Chrome DevTools device emulation.
 
 ### `website-testing/`
